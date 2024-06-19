@@ -46,6 +46,7 @@ import urllib3
 import networkx as nx
 import jinja2
 import yaml
+from packaging import version
 
 # Single source version
 from nrx.__about__ import __version__
@@ -212,6 +213,7 @@ class NBFactory:
         self.nb_session = pynetbox.api(self.config['nb_api_url'],
                                        token=self.config['nb_api_token'],
                                        threading=True)
+        self.nb_api_version = version.parse(self.nb_session.version)
         self.nb_sites = None
         if not config['tls_validate']:
             self.nb_session.http_session.verify = False
@@ -355,11 +357,17 @@ class NBFactory:
             if device.device_type.manufacturer is not None:
                 d["vendor"] = device.device_type.manufacturer.slug
                 d["vendor_name"] = device.device_type.manufacturer.name
-        if device.device_role is not None:
-            d["role"] = device.device_role.slug
-            d["role_name"] = device.device_role.name
-            if d["name"] is None:
-                d["name"] = f"{d['role']}-{device.id}"
+
+        if device.role is not None:
+            if self.nb_api_version >= version.parse("4.0"):
+                d["role"] = device.role.slug
+                d["role_name"] = device.role.name
+            else:
+                d["role"] = device.device_role.slug
+                d["role_name"] = device.device_role.name
+
+        if d["name"] is None:
+            d["name"] = f"{d['role']}-{device.id}"
         if device.primary_ip4 is not None:
             d["primary_ip4"] = device.primary_ip4.address
         if device.primary_ip6 is not None:
@@ -1016,9 +1024,9 @@ def parse_args():
                                                                           tag1,tag2,tag3 (uses AND logic)')
     args_parser.add_argument('-n', '--name',        required=False, help='name of the exported topology (site name or tags by default)')
     args_parser.add_argument(      '--noconfigs',   required=False, help='disable device configuration export (enabled by default)',
-                                                        action=argparse.BooleanOptionalAction)
+                                                        action='store_true')
     args_parser.add_argument('-k', '--insecure',    required=False, help='allow insecure server connections when using TLS',
-                                                        action=argparse.BooleanOptionalAction)
+                                                        action='store_true')
     args_parser.add_argument('-f', '--file',        required=False, help='file with the network graph to import')
     args_parser.add_argument('-M', '--map',         required=False, help=f"file with platform mappings to node parameters (default: {NRX_MAP_NAME} in templates folder)")
     args_parser.add_argument('-T', '--templates',   required=False, help='directory with template files, \

@@ -376,7 +376,7 @@ class NBFactory:
             d["config"] = self._get_device_config(device)
         return d
 
-    def _get_device_config(self, device):
+    def __get_device_config(self, device):
         """Get device config from NetBox"""
         headers = {
             'Authorization': f"Token {self.config['nb_api_token']}",
@@ -390,6 +390,28 @@ class NBFactory:
             config_response = ast.literal_eval(response.text)
             if "content" in config_response:
                 return config_response["content"]
+        except HTTPError as e:
+            debug(f"{device.name}: Get device configuration request failed: {e}")
+        except (Timeout, RequestException) as e:
+            debug(f"{device.name}: Get device configuration failed: {e}")
+        except SyntaxError as e:
+            debug(f"{device.name}: Get device configuration failed: can't parse rendered configuration - {e}")
+        return ""
+
+    def _get_device_config(self, device):
+        """Get device config from NetBox"""
+        headers = {
+            'Authorization': f"Token {self.config['nb_api_token']}",
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+        url = f"{self.config['nb_api_url']}/api/dcim/devices/{device.id}/"
+        try:
+            response = requests.get(url, headers=headers, timeout=self.config['api_timeout'], verify=self.config['tls_validate'])
+            response.raise_for_status()  # Raises an HTTPError if the response status is an error
+            config_response = response.json()['custom_fields']
+            if "dnos_config" in config_response:
+                return config_response["dnos_config"]
         except HTTPError as e:
             debug(f"{device.name}: Get device configuration request failed: {e}")
         except (Timeout, RequestException) as e:

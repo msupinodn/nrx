@@ -68,33 +68,40 @@ def nrx_config_dir():
     """Return path to the nrx configuration directory"""
     return f"{os.getenv('HOME', os.getcwd())}/{NRX_CONFIG_DIR}"
 
+
 def nrx_default_config_path():
     """Return path to the default nrx configuration file"""
     return f"{nrx_config_dir()}/{NRX_DEFAULT_CONFIG_NAME}"
 
+
 def errlog(*args, **kwargs):
     """print message on STDERR"""
     print(*args, file=sys.stderr, **kwargs)
+
 
 def error(*args, **kwargs):
     """log as error and exit"""
     errlog("Error:", *args, **kwargs)
     sys.exit(1)
 
+
 def warning(*args, **kwargs):
     """log as warning"""
     errlog("Warning:", *args, **kwargs)
+
 
 def debug(*args, **kwargs):
     """log as debug"""
     if DEBUG_ON:
         errlog("Debug:", *args, **kwargs)
 
+
 def error_debug(err, d):
     if not DEBUG_ON:
         err += " Use --debug to see the full error message."
     debug(d)
     error(err)
+
 
 def create_output_directory(topology_name, config_dir):
     dir_name = "."
@@ -105,6 +112,7 @@ def create_output_directory(topology_name, config_dir):
     if dir_name != ".":
         create_dirs(dir_name)
     return dir_name
+
 
 def create_dirs(dir_path):
     try:
@@ -160,6 +168,7 @@ def unzip_file(zip_path, dir_path, log_context="[UNZIP]"):
     except (zipfile.BadZipFile, FileNotFoundError, Exception) as e:
         error(f"{log_context} Can't unzip {zip_path}: {e}")
 
+
 def load_yaml_from_file(file, log_context="[LOAD_YAML]"):
     """Load YAML from a file"""
     yaml_data = None
@@ -174,8 +183,10 @@ def load_yaml_from_file(file, log_context="[LOAD_YAML]"):
         debug(f"{log_context} Can't read {file}: {e}")
     return yaml_data
 
+
 class TimeoutHTTPAdapter(HTTPAdapter):
     """HTTPAdapter with custom API timeout"""
+
     def __init__(self, timeout, *args, **kwargs):
         self.timeout = timeout
         super().__init__(*args, **kwargs)
@@ -185,8 +196,10 @@ class TimeoutHTTPAdapter(HTTPAdapter):
             timeout = self.timeout
         return super().send(request, stream, timeout, verify, cert, proxies)
 
+
 class NBNetwork:
     """Class to hold network topology data exported from NetBox"""
+
     def __init__(self):
         self.config = {}
         self.nodes = []
@@ -199,6 +212,7 @@ class NBNetwork:
 
 class NBFactory:
     """Class to export network topology data from NetBox"""
+
     def __init__(self, config):
         self.config = config
         self.nb_net = NBNetwork()
@@ -243,10 +257,8 @@ class NBFactory:
         except (pynetbox.core.query.RequestError, pynetbox.core.query.ContentError) as e:
             error("NetBox API failure", e)
 
-
     def graph(self):
         return self.G
-
 
     def _get_nb_objects(self, kind, block_size):
         attempts, max_attempts = 0, 3
@@ -256,7 +268,7 @@ class NBFactory:
                     self._get_nb_interfaces(block_size)
                 elif kind == "cables":
                     self._get_nb_cables(block_size)
-                break # success, break out of while loop
+                break  # success, break out of while loop
             except (requests.Timeout, requests.exceptions.HTTPError) as e:
                 if isinstance(e, requests.exceptions.HTTPError) and e.response.status_code != 414:
                     error(f"NetBox API failure at get {kind}:", e)
@@ -269,13 +281,12 @@ class NBFactory:
         if attempts == max_attempts:
             error(f"NetBox API failure at get {kind}, max attempts reached")
 
-
     def _get_nb_devices(self):
         """Get device list from NetBox filtered by site, tags and device roles"""
         devices = []
         if len(self.nb_sites) == 0:
             devices.append(self.nb_session.dcim.devices.filter(tag=self.config['export_tags'],
-                                                          role=self.config['export_device_roles'])
+                                                               role=self.config['export_device_roles'])
                            )
         else:
             site_ids = []
@@ -283,20 +294,19 @@ class NBFactory:
                 debug(f'Site ID: {site.id} - Site Name: {site.name}')
                 site_ids.append(str(site.id))
             devices = self.nb_session.dcim.devices.filter(site_id=site_ids,
-                                                        tag=self.config['export_tags'],
-                                                        role=self.config['export_device_roles'])
+                                                          tag=self.config['export_tags'],
+                                                          role=self.config['export_device_roles'])
         for device in devices:
             d = self._init_device(device)
             self.nb_net.nodes.append(d)
             d["node_id"] = len(self.nb_net.nodes) - 1
             self.nb_net.devices.append(d)
-            d["device_index"] = len(self.nb_net.devices) - 1 # do not use insert with self.nb_net.devices!
+            d["device_index"] = len(self.nb_net.devices) - 1  # do not use insert with self.nb_net.devices!
             # index of the device in the devices list will match its ID index in device_ids list
             self.nb_net.device_ids.append(device.id)
             debug("Added device:", d)
 
-
-    def _get_nb_interfaces(self, block_size = 4):
+    def _get_nb_interfaces(self, block_size=4):
         """Get interfaces from NetBox filtered by devices we already have in the network topology"""
         size = len(self.nb_net.device_ids)
         debug(f"Exporting interfaces from with {size} devices, in blocks of {block_size}")
@@ -306,7 +316,7 @@ class NBFactory:
                                                                          kind="physical",
                                                                          cabled=True,
                                                                          connected=True)):
-                if "base" in interface.type.value: # only ethernet interfaces
+                if "base" in interface.type.value:  # only ethernet interfaces
                     debug(interface.device, ":", interface, ":", interface.type.value)
                     i = {
                         "id": interface.id,
@@ -317,11 +327,11 @@ class NBFactory:
                     self.nb_net.nodes.append(i)
                     i["node_id"] = len(self.nb_net.nodes) - 1
                     self.nb_net.interfaces.append(i)
-                    i["interface_index"] = len(self.nb_net.interfaces) - 1 # do not use insert with self.nb_net.interfaces!
+                    i["interface_index"] = len(
+                        self.nb_net.interfaces) - 1  # do not use insert with self.nb_net.interfaces!
                     # index of the interface in the interfaces list will match its ID index in interface_ids list
                     self.nb_net.interface_ids.append(interface.id)
                     self.nb_net.cable_ids.append(interface.cable.id)
-
 
     def _init_device(self, device):
         """Initialize device data"""
@@ -342,6 +352,7 @@ class NBFactory:
             "primary_ip4": "",
             "primary_ip6": "",
             "config": "",
+            "image": ""
         }
 
         if device.name is not None and len(device.name) > 0:
@@ -373,10 +384,12 @@ class NBFactory:
         if device.primary_ip6 is not None:
             d["primary_ip6"] = device.primary_ip6.address
         if self.config["export_configs"]:
-            d["config"] = self._get_device_config(device)
+            d["config"] = self._get_dnos_config(device)
+        if self.config["export_container_image"]:
+            d["container_image"] = self._get_container_image(device)
         return d
 
-    def __get_device_config(self, device):
+    def _get_device_config(self, device):
         """Get device config from NetBox"""
         headers = {
             'Authorization': f"Token {self.config['nb_api_token']}",
@@ -385,7 +398,8 @@ class NBFactory:
         }
         url = f"{self.config['nb_api_url']}/api/dcim/devices/{device.id}/render-config/"
         try:
-            response = requests.post(url, headers=headers, timeout=self.config['api_timeout'], verify=self.config['tls_validate'])
+            response = requests.post(url, headers=headers, timeout=self.config['api_timeout'],
+                                     verify=self.config['tls_validate'])
             response.raise_for_status()  # Raises an HTTPError if the response status is an error
             config_response = ast.literal_eval(response.text)
             if "content" in config_response:
@@ -398,7 +412,7 @@ class NBFactory:
             debug(f"{device.name}: Get device configuration failed: can't parse rendered configuration - {e}")
         return ""
 
-    def _get_device_config(self, device):
+    def _get_dnos_config(self, device):
         """Get device config from NetBox"""
         headers = {
             'Authorization': f"Token {self.config['nb_api_token']}",
@@ -407,11 +421,35 @@ class NBFactory:
         }
         url = f"{self.config['nb_api_url']}/api/dcim/devices/{device.id}/"
         try:
-            response = requests.get(url, headers=headers, timeout=self.config['api_timeout'], verify=self.config['tls_validate'])
+            response = requests.get(url, headers=headers, timeout=self.config['api_timeout'],
+                                    verify=self.config['tls_validate'])
             response.raise_for_status()  # Raises an HTTPError if the response status is an error
             config_response = response.json()['custom_fields']
             if "dnos_config" in config_response:
                 return config_response["dnos_config"]
+        except HTTPError as e:
+            debug(f"{device.name}: Get device configuration request failed: {e}")
+        except (Timeout, RequestException) as e:
+            debug(f"{device.name}: Get device configuration failed: {e}")
+        except SyntaxError as e:
+            debug(f"{device.name}: Get device configuration failed: can't parse rendered configuration - {e}")
+        return ""
+
+    def _get_container_image(self, device):
+        """Get device config from NetBox"""
+        headers = {
+            'Authorization': f"Token {self.config['nb_api_token']}",
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+        url = f"{self.config['nb_api_url']}/api/dcim/devices/{device.id}/"
+        try:
+            response = requests.get(url, headers=headers, timeout=self.config['api_timeout'],
+                                    verify=self.config['tls_validate'])
+            response.raise_for_status()  # Raises an HTTPError if the response status is an error
+            config_response = response.json()['custom_fields']
+            if "container_image" in config_response:
+                return config_response["container_image"]
         except HTTPError as e:
             debug(f"{device.name}: Get device configuration request failed: {e}")
         except (Timeout, RequestException) as e:
@@ -425,7 +463,7 @@ class NBFactory:
             term_a = cable.a_terminations[0]
             term_b = cable.b_terminations[0]
             if isinstance(term_a, pynetbox.models.dcim.Interfaces) and \
-               isinstance(term_b, pynetbox.models.dcim.Interfaces):
+                    isinstance(term_b, pynetbox.models.dcim.Interfaces):
                 return [term_a, term_b]
             interface = None
             if isinstance(term_a, pynetbox.models.dcim.Interfaces):
@@ -438,7 +476,8 @@ class NBFactory:
                     if len(trace[0]) == 1 and len(trace[-1]) == 1:
                         side_a = trace[0][0]
                         side_b = trace[-1][0]
-                        if isinstance(side_a, pynetbox.models.dcim.Interfaces) and isinstance(side_b, pynetbox.models.dcim.Interfaces):
+                        if isinstance(side_a, pynetbox.models.dcim.Interfaces) and isinstance(side_b,
+                                                                                              pynetbox.models.dcim.Interfaces):
                             debug(f"Traced {side_a.device} {side_a.name} <-> {side_b.device} {side_b.name}: {trace}")
                             return [side_a, side_b]
             debug(f"Skipping {cable} as both terminations are not interfaces or cannot be traced")
@@ -485,7 +524,6 @@ class NBFactory:
             for cable in list(self.nb_session.dcim.cables.filter(id=cables_block)):
                 self._add_cable_to_graph(cable)
 
-
     def export_graph_gml(self):
         export_file = self.topology_name + ".gml"
         dir_path = create_output_directory(self.topology_name, self.config['output_dir'])
@@ -512,8 +550,10 @@ class NBFactory:
             error("Can't export as JSON:", e)
         print(f"CYJS graph saved to: {export_path}")
 
+
 class NetworkTopology:
     """Class to create network topology artifacts"""
+
     def __init__(self, config):
         self.config = config
         self.G = None
@@ -529,22 +569,24 @@ class NetworkTopology:
         if len(config['topology_name']) > 0:
             self.topology['name'] = config['topology_name']
         self.j2env = jinja2.Environment(
-                    loader=jinja2.FileSystemLoader(self.config['templates_path'], followlinks=True),
-                    extensions=['jinja2.ext.do'],
-                    trim_blocks=True, lstrip_blocks=True
-                )
+            loader=jinja2.FileSystemLoader(self.config['templates_path'], followlinks=True),
+            extensions=['jinja2.ext.do'],
+            trim_blocks=True, lstrip_blocks=True
+        )
         self.j2env.filters['ceil'] = math.ceil
         self.platform_map = self._read_platform_map(self.config['platform_map'])
         self.templates = {
             # if _require_map_ is False, attempt to load a template from _path_/<platform>.j2 even if the template is not defined in the platform_map
-            'interface_names': {'_path_': f"{self.config['output_format']}/interface_names", '_description_': 'interface name', '_require_map_': False},
-            'interface_maps':  {'_path_': f"{self.config['output_format']}/interface_maps",  '_description_': 'interface map', '_require_map_': True},
-            'nodes':           {'_path_': f"{self.config['output_format']}/nodes", '_description_': 'node', '_require_map_': False}
+            'interface_names': {'_path_': f"{self.config['output_format']}/interface_names",
+                                '_description_': 'interface name', '_require_map_': False},
+            'interface_maps': {'_path_': f"{self.config['output_format']}/interface_maps",
+                               '_description_': 'interface map', '_require_map_': True},
+            'nodes': {'_path_': f"{self.config['output_format']}/nodes", '_description_': 'node',
+                      '_require_map_': False}
         }
         self.files_path = '.'
         if self.config['output_format'] != 'cyjs':
             self.config['format'] = self._read_formats_map(config['formats_map'])
-
 
     def _read_platform_map(self, file):
         """Read platform_map from a YAML file to locate template parameters for a range of platforms"""
@@ -561,7 +603,6 @@ class NetworkTopology:
         error(f"[PLATFORM] Unsupported 'type' in {file}, has to be a 'platform_map' with a compatible 'version'")
         return {}
 
-
     def build_from_file(self, file):
         """Build network topology from a CYJS file"""
         self._read_network_graph(file)
@@ -572,7 +613,6 @@ class NetworkTopology:
         self.G = graph
         self._build_topology()
 
-
     def _read_formats_map(self, file):
         """Read format_map from a YAML file to initialize output parameters"""
         debug(f"[FORMAT] Reading format map from: {file}")
@@ -581,11 +621,12 @@ class NetworkTopology:
             if formats_map['version'] not in ['v1']:
                 error(f"[FORMAT] Unsupported version of {file} as format map")
             if self.config['output_format'] not in formats_map['formats']:
-                error(f"[FORMAT] Output format '{self.config['output_format']}' is not found in {file} under {self.config['templates_path']}")
+                error(
+                    f"[FORMAT] Output format '{self.config['output_format']}' is not found in {file} under {self.config['templates_path']}")
             return formats_map['formats'][self.config['output_format']]
-        error(f"[FORMAT] Unsupported 'type' in {file} under {self.config['templates_path']}, has to be a 'formats_map' with a 'version'")
+        error(
+            f"[FORMAT] Unsupported 'type' in {file} under {self.config['templates_path']}, has to be a 'formats_map' with a 'version'")
         return None
-
 
     def _read_network_graph(self, file):
         """Read network topology graph from a CYJS file"""
@@ -674,8 +715,9 @@ class NetworkTopology:
                     int_list = list(int_map.keys())
                     int_list.sort()
                     # Add emulated interface name for each nos interface name we got from the imported graph.
-                    sorted_map = {i: {'name': f"{self._render_emulated_interface_name(node['platform'], i, int_list.index(i))}",
-                                      'index': int_list.index(i)} for i in int_list}
+                    sorted_map = {
+                        i: {'name': f"{self._render_emulated_interface_name(node['platform'], i, int_list.index(i))}",
+                            'index': int_list.index(i)} for i in int_list}
                     self.device_interfaces_map[name] = sorted_map
                     # Append entries from device_interfaces_map to each device under self.topology['nodes']
                     node['interfaces'] = self.device_interfaces_map[name]
@@ -733,8 +775,7 @@ class NetworkTopology:
             l['b']['index'] = self.device_interfaces_map[l['b']['node']][l['b']['interface']]['index']
             link_id += 1
 
-
-    def _get_platform_template(self, ttype, platform, is_required = False):
+    def _get_platform_template(self, ttype, platform, is_required=False):
         """Get a Jinja2 template for a given type and platform, as well as initialize template params"""
         template = None
         if ttype in self.templates and '_description_' in self.templates[ttype]:
@@ -772,7 +813,6 @@ class NetworkTopology:
             error(f"[TEMPLATE] No such template type as {ttype}")
         return template
 
-
     def _get_platform_template_params(self, ttype, platform):
         """Return template parameters for a given type and platform."""
         params = None
@@ -785,7 +825,6 @@ class NetworkTopology:
             else:
                 params = self.templates[ttype][platform]['params']
         return params
-
 
     def _map_platform_to_params(self, ttype, platform):
         """Map platform name to a node kind and then return a template file path for that kind"""
@@ -803,10 +842,10 @@ class NetworkTopology:
                     kind = platform_kinds[self.config['output_format']]
                     debug(f"[MAP] Mapped platform '{platform}' to '{kind}' for {ttype} template")
             else:
-                debug(f"[MAP] No mapping for platform '{platform}' was found for '{self.config['output_format']}' output format, will use '{platform}' for {ttype} template")
+                debug(
+                    f"[MAP] No mapping for platform '{platform}' was found for '{self.config['output_format']}' output format, will use '{platform}' for {ttype} template")
             return self._map_kind_to_params(ttype, kind)
         return default_map
-
 
     def _map_kind_to_params(self, ttype, kind):
         """Map node kind to template parameters"""
@@ -823,14 +862,14 @@ class NetworkTopology:
                     'template': f"{self.templates[ttype]['_path_']}/{kind}.j2"
                 }
             if self.config['output_format'] in self.platform_map['kinds'] and \
-                kind in self.platform_map['kinds'][self.config['output_format']] and \
-                ttype in self.platform_map['kinds'][self.config['output_format']][kind]:
+                    kind in self.platform_map['kinds'][self.config['output_format']] and \
+                    ttype in self.platform_map['kinds'][self.config['output_format']][kind]:
                 kind_map.update(self.platform_map['kinds'][self.config['output_format']][kind][ttype])
                 debug(f"[MAP] Mapped kind '{kind}' to '{kind_map}'")
                 return kind_map
-            debug(f"[MAP] No {desc} template for kind '{kind}' was found for '{self.config['output_format']}' output format, will use '{kind_map['template']}'")
+            debug(
+                f"[MAP] No {desc} template for kind '{kind}' was found for '{self.config['output_format']}' output format, will use '{kind_map['template']}'")
         return kind_map
-
 
     def _get_template_with_file(self, j2file):
         template = None
@@ -847,8 +886,7 @@ class NetworkTopology:
             error(m)
         return template
 
-
-    def _load_yaml_from_template_file(self, file, log_context = "[LOAD_YAML]"):
+    def _load_yaml_from_template_file(self, file, log_context="[LOAD_YAML]"):
         template = self._get_template_with_file(file)
         try:
             return yaml.load(template.render(self.config), Loader=yaml.SafeLoader)
@@ -857,7 +895,6 @@ class NetworkTopology:
         except yaml.scanner.ScannerError as e:
             error(f"{log_context} Can't parse {file} as YAML:", e)
         return None
-
 
     def _render_emulated_nodes(self):
         """Render device nodes via Jinja2 templates"""
@@ -889,7 +926,7 @@ class NetworkTopology:
     def _render_emulated_interface_name(self, platform, interface, index):
         """Render emulated interface name via Jinja2 templates"""
         # We assume interface with index `0` is reserved for management, and start with `1`
-        default_name = f"eth{index+1}"
+        default_name = f"eth{index + 1}"
         template = self._get_platform_template('interface_names', platform, True)
         if template is not None:
             try:
@@ -900,7 +937,7 @@ class NetworkTopology:
 
     def _render_topology(self):
         """Render network topology via Jinja2 templates"""
-        #debug("Topology data to render:", json.dumps(self.topology))
+        # debug("Topology data to render:", json.dumps(self.topology))
         # Load Jinja2 template to run the topology through
         try:
             j2file = f"{self.config['output_format']}/topology.j2"
@@ -952,9 +989,11 @@ class NetworkTopology:
         if 'motd' in topo_dict:
             print(f"{topo_dict['motd']}")
         elif self.config['output_format'] == 'clab':
-            print(f"To deploy this topology, run: sudo -E clab dep -t {self.files_path}/{self.topology['name']}.clab.yaml")
+            print(
+                f"To deploy this topology, run: sudo -E clab dep -t {self.files_path}/{self.topology['name']}.clab.yaml")
         elif self.config['output_format'] == 'd2':
-            print(f"To visualize this D2 topology, open https://play.d2lang.com and paste content of the file: {self.files_path}/{self.topology['name']}.d2")
+            print(
+                f"To visualize this D2 topology, open https://play.d2lang.com and paste content of the file: {self.files_path}/{self.topology['name']}.d2")
 
     def _render_interface_map(self, node):
         """Render interface mapping file for a node"""
@@ -1007,12 +1046,14 @@ class NetworkTopology:
             return config_file
         return None
 
+
 def arg_input_check(s):
     """Check if input source is supported"""
     allowed_values = ['netbox', 'cyjs']
     if s in allowed_values:
         return s
     raise argparse.ArgumentTypeError(f"input source has to be one of {allowed_values}")
+
 
 def parse_args():
     """CLI arguments parser"""
@@ -1028,33 +1069,41 @@ def parse_args():
 
     sites_group = args_parser.add_mutually_exclusive_group()
 
-    args_parser.add_argument('-v', '--version',     action='version', version=f'%(prog)s {__version__}')
-    args_parser.add_argument('-d', '--debug',       nargs=0, action=NrxDebugAction, help='enable debug output')
-    args_parser.add_argument('-I', '--init',        nargs='?', help=f"initialize configuration directory in $HOME/{NRX_CONFIG_DIR} and exit. \
+    args_parser.add_argument('-v', '--version', action='version', version=f'%(prog)s {__version__}')
+    args_parser.add_argument('-d', '--debug', nargs=0, action=NrxDebugAction, help='enable debug output')
+    args_parser.add_argument('-I', '--init', nargs='?',
+                             help=f"initialize configuration directory in $HOME/{NRX_CONFIG_DIR} and exit. \
                                                                       optionally, specify a VERSION to initialize with: -I 0.1.0",
-                                                        const=__version__, action=NrxInitAction, metavar='VERSION')
-    args_parser.add_argument('-c', '--config',      required=False, help=f"configuration file, default: $HOME/{NRX_CONFIG_DIR}/{NRX_DEFAULT_CONFIG_NAME}",
-                                                        default=nrx_default_config_path())
-    args_parser.add_argument('-i', '--input',       required=False, help='input source: netbox (default) | cyjs',
-                                                        default='netbox', type=arg_input_check,)
-    args_parser.add_argument('-o', '--output',      required=False, help='output format: cyjs | clab | cml | graphite | d2 or any other format supported by provided templates')
-    args_parser.add_argument('-a', '--api',         required=False, help='netbox API URL')
-    sites_group.add_argument('-s', '--site',        required=False, help='netbox site to export, cannot be combined with --sites')
-    sites_group.add_argument(      '--sites',       required=False, help='netbox sites to export, for multiple tags use a comma-separated list: \
+                             const=__version__, action=NrxInitAction, metavar='VERSION')
+    args_parser.add_argument('-c', '--config', required=False,
+                             help=f"configuration file, default: $HOME/{NRX_CONFIG_DIR}/{NRX_DEFAULT_CONFIG_NAME}",
+                             default=nrx_default_config_path())
+    args_parser.add_argument('-i', '--input', required=False, help='input source: netbox (default) | cyjs',
+                             default='netbox', type=arg_input_check, )
+    args_parser.add_argument('-o', '--output', required=False,
+                             help='output format: cyjs | clab | cml | graphite | d2 or any other format supported by provided templates')
+    args_parser.add_argument('-a', '--api', required=False, help='netbox API URL')
+    sites_group.add_argument('-s', '--site', required=False,
+                             help='netbox site to export, cannot be combined with --sites')
+    sites_group.add_argument('--sites', required=False, help='netbox sites to export, for multiple tags use a comma-separated list: \
                                                                           site1,site2,site3 (uses OR logic)')
-    args_parser.add_argument('-t', '--tags',        required=False, help='netbox tags to export, for multiple tags use a comma-separated list: \
+    args_parser.add_argument('-t', '--tags', required=False, help='netbox tags to export, for multiple tags use a comma-separated list: \
                                                                           tag1,tag2,tag3 (uses AND logic)')
-    args_parser.add_argument('-n', '--name',        required=False, help='name of the exported topology (site name or tags by default)')
-    args_parser.add_argument(      '--noconfigs',   required=False, help='disable device configuration export (enabled by default)',
-                                                        action='store_true')
-    args_parser.add_argument('-k', '--insecure',    required=False, help='allow insecure server connections when using TLS',
-                                                        action='store_true')
-    args_parser.add_argument('-f', '--file',        required=False, help='file with the network graph to import')
-    args_parser.add_argument('-M', '--map',         required=False, help=f"file with platform mappings to node parameters (default: {NRX_MAP_NAME} in templates folder)")
-    args_parser.add_argument('-T', '--templates',   required=False, help='directory with template files, \
+    args_parser.add_argument('-n', '--name', required=False,
+                             help='name of the exported topology (site name or tags by default)')
+    args_parser.add_argument('--noconfigs', required=False,
+                             help='disable device configuration export (enabled by default)',
+                             action='store_true')
+    args_parser.add_argument('-k', '--insecure', required=False,
+                             help='allow insecure server connections when using TLS',
+                             action='store_true')
+    args_parser.add_argument('-f', '--file', required=False, help='file with the network graph to import')
+    args_parser.add_argument('-M', '--map', required=False,
+                             help=f"file with platform mappings to node parameters (default: {NRX_MAP_NAME} in templates folder)")
+    args_parser.add_argument('-T', '--templates', required=False, help='directory with template files, \
                                                                           will be prepended to TEMPLATES_PATH list \
                                                                           in the configuration file')
-    args_parser.add_argument('-D', '--dir',         required=False, help='save files into specified directory. \
+    args_parser.add_argument('-D', '--dir', required=False, help='save files into specified directory. \
                                                                           nested relative and absolute paths are OK \
                                                                           (topology name is used by default)')
 
@@ -1066,6 +1115,7 @@ def parse_args():
 
 class NrxDebugAction(argparse.Action):
     """Argparse action to turn on debug output"""
+
     def __call__(self, parser, namespace, values, option_string=None):
         global DEBUG_ON
         DEBUG_ON = True
@@ -1073,6 +1123,7 @@ class NrxDebugAction(argparse.Action):
 
 class NrxInitAction(argparse.Action):
     """Argparse action to initialize configuration directory"""
+
     def __call__(self, parser, namespace, values, option_string=None):
         # Create a NRX_CONFIG_DIR directory in the user's home directory, or in the current directory if HOME is not set
         debug(f"[INIT] version to use: {values}")
@@ -1088,7 +1139,8 @@ class NrxInitAction(argparse.Action):
             error("[INIT] Can't download templates")
         default_config_path = get_default_config(versions, config_dir)
         if default_config_path is not None:
-            print(f"[INIT] Saved default config to: {default_config_path}. Rename it as {NRX_DEFAULT_CONFIG_NAME} and edit as needed")
+            print(
+                f"[INIT] Saved default config to: {default_config_path}. Rename it as {NRX_DEFAULT_CONFIG_NAME} and edit as needed")
         else:
             error("[INIT] Can't download default config")
         sys.exit(0)
@@ -1179,28 +1231,29 @@ def load_toml_config(filename):
         'output_format': 'cyjs',
         'export_device_roles': ["router", "core-switch", "access-switch", "distribution-switch", "tor-switch"],
         'device_role_levels': {
-            'unknown':              0,
-            'server':               0,
-            'tor-switch':           1,
-            'access-switch':        1,
-            'leaf':                 1,
-            'distribution-switch':  2,
-            'spine':                2,
-            'core-switch':          3,
-            'super-spine':          3,
-            'router':               4,
+            'unknown': 0,
+            'server': 0,
+            'tor-switch': 1,
+            'access-switch': 1,
+            'leaf': 1,
+            'distribution-switch': 2,
+            'spine': 2,
+            'core-switch': 3,
+            'super-spine': 3,
+            'router': 4,
         },
         'export_sites': [],
         'export_tags': [],
         'topology_name': '',
         'export_configs': True,
+        'export_container_image': True,
         'templates_path': ["./templates", f"{nrx_config_dir()}/templates"],
         'formats_map': NRX_FORMATS_NAME,
         'platform_map': NRX_MAP_NAME,
         'output_dir': '',
         'nb_api_params': {
-            'interfaces_block_size':    4,
-            'cables_block_size':        64,
+            'interfaces_block_size': 4,
+            'cables_block_size': 64,
         },
     }
     if filename is not None and len(filename) > 0:
@@ -1227,23 +1280,27 @@ def load_toml_config(filename):
             config[k] = [os.path.expandvars(p) for p in config[k]]
     return config
 
+
 def config_apply_netbox_args(config, args):
     """Apply netbox-related arguments to the configuration and validate it"""
     if args.api is not None and len(args.api) > 0:
         config['nb_api_url'] = args.api
     if len(config['nb_api_url']) == 0:
-        error("Need an API URL to connect to NetBox.\nUse --api argument, NB_API_URL environment variable or key in --config file")
+        error(
+            "Need an API URL to connect to NetBox.\nUse --api argument, NB_API_URL environment variable or key in --config file")
     if len(config['nb_api_token']) == 0:
         error("Need an API token to connect to NetBox.\nUse NB_API_TOKEN environment variable or key in --config file")
     if args.site is not None and len(args.site) > 0:
-        config['export_sites'] = args.site.split(',')  # --site and --sites can be used interchangeably but not at the same time
+        config['export_sites'] = args.site.split(
+            ',')  # --site and --sites can be used interchangeably but not at the same time
     elif args.sites is not None and len(args.sites) > 0:
         config['export_sites'] = args.sites.split(',')
     if args.tags is not None and len(args.tags) > 0:
         config['export_tags'] = args.tags.split(',')
         debug(f"List of tags to filter devices for export: {config['export_tags']}")
     if len(config['export_sites']) == 0 and len(config['export_tags']) == 0:
-        error("Need a Site name or Tags to export. Use --sites/--tags arguments, or EXPORT_SITE/EXPORT_TAGS key in --config file")
+        error(
+            "Need a Site name or Tags to export. Use --sites/--tags arguments, or EXPORT_SITE/EXPORT_TAGS key in --config file")
     if args.noconfigs is not None:
         if args.noconfigs:
             config['export_configs'] = False
@@ -1251,6 +1308,7 @@ def config_apply_netbox_args(config, args):
             config['export_configs'] = True
 
     return config
+
 
 def load_config(args):
     """Load, consolidate and validate configuration"""
@@ -1293,6 +1351,7 @@ def load_config(args):
 
     return config
 
+
 def cli():
     """Main entry for CLI execution, called from main() in __init__.py"""
     # Parameters
@@ -1308,10 +1367,10 @@ def cli():
         except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as e:
             if "SSL: WRONG_VERSION_NUMBER" in str(e):
                 error_debug(f"Unable to negotiate TLS version when connecting to {config['nb_api_url']}. "
-                             "Could the server be using unencrypted HTTP?", e)
+                            "Could the server be using unencrypted HTTP?", e)
             elif "SSL: CERTIFICATE_VERIFY_FAILED" in str(e):
                 error_debug(f"Server certificate validation failed when connecting to {config['nb_api_url']}. "
-                             "To skip validation, use --insecure.", e)
+                            "To skip validation, use --insecure.", e)
             else:
                 error_debug(f"Can't connect to {config['nb_api_url']}.", e)
         except Exception as e:

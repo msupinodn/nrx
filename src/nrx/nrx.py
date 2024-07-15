@@ -1029,13 +1029,17 @@ class NetworkTopology:
             name = node['name']
         else:
             return None
-        if 'config' in node and len(node['config']) > 0:
-            config = node['config']
-        else:
-            return None
         if 'startup_config_mode' in self.config['format'] and self.config['format']['startup_config_mode'] == 'file':
             config_file = f"{name}.config"
             config_path = f"{self.files_path}/{config_file}"
+
+            if 'config' in node and len(node['config']) > 0:
+                config = node['config']
+            else:
+                open(config_path, 'w').close()
+                print(f"Created empty device configuration file: {config_path}")
+                return config_file
+
             try:
                 with open(config_path, "w", encoding="utf-8") as f:
                     f.write(config)
